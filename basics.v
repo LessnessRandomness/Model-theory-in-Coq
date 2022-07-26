@@ -31,7 +31,7 @@ Proof.
 Defined.
 
 Inductive Formula F R (V: eqType) (L: Language F R) :=
-  | equality: ∀ (T1 T2: Term V L), Formula V L
+  | equality: Term V L → Term V L → Formula V L
   | atomic_formula: ∀ (r: R), (Term V L)^(relation_arity L r) → Formula V L
   | negation: Formula V L → Formula V L
   | disjunction: Formula V L → Formula V L → Formula V L
