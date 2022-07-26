@@ -154,14 +154,16 @@ Definition deductive_closure F R V (L: Language F R) (S: Sentence V L → Prop):
 
 (* Completeness *)
 
+Theorem negation_of_sentence_as_sentence F R V (L: Language F R) (A: Sentence V L): Sentence V L.
+Proof.
+  refine (Build_Sentence (negation A) _). abstract (destruct A; simpl in *; auto).
+Defined.
+
 Definition complete F R V (L: Language F R) (S: Sentence V L → Prop) :=
-  ∀ (A: Sentence V L), entailment S A ∨ ¬ entailment S A.
+  ∀ (A: Sentence V L), entailment S A ∨ entailment S (negation_of_sentence_as_sentence A).
 
 (* Elementary equivalence *)
 
 Definition elementary_equivalence F R (L: Language F R) (M N: Structure L) :=
   ∀ V (A: Sentence V L), model_of_sentence M A ↔ model_of_sentence N A.
-
-
-
 
