@@ -64,7 +64,7 @@ Module LanguageOfRings.
       - intro v. exact (v ord0_2 - v ord1_2).
       - intro v. exact (v ord0_2 * v ord1_2).
       - exact (λ _, 0).
-      - exact (λ _, 0).
+      - exact (λ _, 1).
     + intro r. destruct r.
   Defined.
 
@@ -116,7 +116,7 @@ Module LanguageOfGraphs.
   Defined.
 End LanguageOfGraphs.
 
-Module Rings.
+Module Groups.
   Inductive F := e | mult.
   Inductive R := .
 
@@ -137,5 +137,5 @@ Module Rings.
         exact (v n0_2 + v n1_2).
     + intro r. destruct r.
   Defined.
-End Rings.
+End Groups.
 
