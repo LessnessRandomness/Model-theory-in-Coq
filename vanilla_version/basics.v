@@ -114,7 +114,7 @@ Structure Isomorphism Fm Rm Fn Rn (Lm: Language Fm Rm) (Ln: Language Fn Rn) (M: 
   isomorphism_property_2: ∀ x, domain_map isomorphism_emb_inv (domain_map isomorphism_emb x) = x
 }.
 
-Definition Auomorphism F R (L: Language F R) (M: Structure L) := Isomorphism M M.
+Definition Automorphism F R (L: Language F R) (M: Structure L) := Isomorphism M M.
 
 (* Definable set *)
 
