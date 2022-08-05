@@ -17,13 +17,24 @@ Inductive Term F R V (L: Language F R) :=
   | function_term: ∀ (f: F), (Term V L)^(function_arity L f) → Term V L.
 Arguments variable {_} {_} {_} {L}. (*?*)
 
-Definition Term_induction F R V (L: Language F R) (P: Term V L -> Prop):
+Definition Term_induction F R V (L: Language F R) (P: Term V L → Prop):
   (∀ (s: V), P (variable s)) →
-  (∀ (f: F) (T: Term V L ^ function_arity L f), vector.Forall P T → P (function_term f T)) →
+  (∀ (f: F) (v: Term V L ^ function_arity L f), vector.Forall P v → P (function_term f v)) →
   ∀ T, P T.
 Proof.
   intros H H0. refine (fix IHt (t: Term V L) := match t with variable v => H v | function_term f T => _ end).
   refine (H0 _ T _). induction T; [exact I | split; auto].
+Qed.
+
+Definition Term_recursion F R V (L: Language F R) (P: Term V L → Type):
+  (∀ v : V, P (variable v)) →
+  (∀ (f : F) (v : Term V L ^ function_arity L f), hvector P v → P (function_term f v)) →
+  ∀ t, P t.
+Proof.
+  intros H H0. refine (fix IHt (t: Term V L) := match t with variable v => H v | function_term f T => _ end).
+  refine (H0 _ T _). intros. induction T.
+  + constructor.
+  + constructor. apply IHt. exact IHT.
 Defined.
 
 Inductive Formula F R V (L: Language F R) :=

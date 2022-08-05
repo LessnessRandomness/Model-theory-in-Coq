@@ -11,13 +11,16 @@ Inductive vector A: nat → Type :=
   | vcons: ∀ (n: nat), A → vector A n → vector A (S n).
 Arguments vnil {A}.
 
-Notation "A ^ n" := (vector A n).
-
+Notation "A ^ n" := (vector A n): vector_scope.
 Notation "[ ]" := (vnil) (format "[ ]"): vector_scope.
 Notation "[ x ]" := (vcons x nil): vector_scope.
 Notation "[ x ; y ; .. ; z ]" := (vcons x (vcons y .. (vcons z vnil) ..)): vector_scope.
 
 Open Scope vector_scope.
+
+Inductive hvector A (F: A → Type): ∀ n, A^n → Type :=
+  | Hnil: hvector F vnil
+  | Hcons: ∀ n x v, F x → hvector F v → hvector F (@vcons _ n x v).
 
 Module vector.
   Fixpoint In A n i (v: A^n): Prop :=
@@ -73,3 +76,20 @@ Module vector.
 End vector.
 
 Definition injective A B (f: A → B) := ∀ x y, f x = f y → x = y.
+
+Module nonconstructive.
+  (* Indefinite description *)
+  Definition ID := ∀ A (P: A → Prop), (∃ x, P x) → { x | P x }.
+  (* Law of excluded middle *)
+  Definition LEM := ∀ (P: Prop), P ∨ ¬ P.
+
+  (* Disjunction to sumbool. *)
+  Theorem D2S: ID → ∀ (A B: Prop), (A ∨ B) → {A} + {B}.
+  Proof.
+    intros H A B. intro. assert (ex (fun _: A + B => True)).
+    { destruct H0.
+      + exists (inl H0). auto.
+      + exists (inr H0). auto. }
+    apply H in H1. destruct H1. destruct x; auto.
+  Qed.
+End nonconstructive.
