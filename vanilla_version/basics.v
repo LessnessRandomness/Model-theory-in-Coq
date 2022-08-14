@@ -1,4 +1,4 @@
-Require Import Utf8 utils.
+Require Import Utf8 List Arith utils.
 Import EqNotations.
 Set Implicit Arguments.
 
@@ -9,96 +9,142 @@ Structure Language F R := {
   relation_arity: R → nat
 }.
 
-Definition Function A n := A^n → A.
-Definition Relation A n := A^n → Prop.
-
-Inductive Term F R V (L: Language F R) :=
-  | variable: V → Term V L
-  | function_term: ∀ (f: F), (Term V L)^(function_arity L f) → Term V L.
+Inductive preTerm F R V (L: Language F R): Type :=
+  | variable: V → preTerm V L
+  | function_term: ∀ (f: F), list (preTerm V L) → preTerm V L.
 Arguments variable {_} {_} {_} {L}. (*?*)
 
-Definition Term_induction F R V (L: Language F R) (P: Term V L → Prop):
+Definition preTerm_induction F R V (L: Language F R) (P: preTerm V L → Prop):
   (∀ (s: V), P (variable s)) →
-  (∀ (f: F) (v: Term V L ^ function_arity L f), vector.Forall P v → P (function_term f v)) →
+  (∀ (f: F) (v: list (preTerm V L)), Forall P v → P (function_term f v)) →
   ∀ T, P T.
 Proof.
-  intros H H0. refine (fix IHt (t: Term V L) := match t with variable v => H v | function_term f T => _ end).
-  refine (H0 _ T _). induction T; [exact I | split; auto].
-Qed.
+  intros H H0. refine (fix IHt (t: preTerm V L) := match t with variable v => H v | function_term f T => _ end).
+  refine (H0 _ T _). induction T; constructor; auto.
+Defined.
 
-Definition Term_recursion F R V (L: Language F R) (P: Term V L → Type):
-  (∀ v : V, P (variable v)) →
-  (∀ (f : F) (v : Term V L ^ function_arity L f), hvector P v → P (function_term f v)) →
+Definition preTerm_recursion F R V (L: Language F R) (P: preTerm V L → Type):
+  (∀ v: V, P (variable v)) →
+  (∀ (f: F) (v: list (preTerm V L)), hlist P v → P (function_term f v)) →
   ∀ t, P t.
 Proof.
-  intros H H0. refine (fix IHt (t: Term V L) := match t with variable v => H v | function_term f T => _ end).
-  refine (H0 _ T _). intros. induction T.
+  intros H H0. refine (fix IHt (t: preTerm V L) := match t with variable v => H v | function_term f T => _ end).
+  refine (H0 _ T _). induction T.
   + constructor.
   + constructor. apply IHt. exact IHT.
 Defined.
 
-Inductive Formula F R V (L: Language F R) :=
-  | equality: Term V L → Term V L → Formula V L
-  | atomic_formula: ∀ (r: R), (Term V L)^(relation_arity L r) → Formula V L
-  | negation: Formula V L → Formula V L
-  | disjunction: Formula V L → Formula V L → Formula V L
-  | conjunction: Formula V L → Formula V L → Formula V L
-  | existence_quantifier: V → Formula V L → Formula V L
-  | universal_quantifier: V → Formula V L → Formula V L.
+Definition term_correct F R V (L: Language F R) (T: preTerm V L): bool.
+Proof.
+  induction T using preTerm_recursion.
+  + exact true.
+  + refine (andb (if Nat.eq_dec (length v) (function_arity L f) then true else false) _).
+    induction X. exact true. exact (andb IHX f0).
+Defined.
 
-Inductive term_has_variable F R V (L: Language F R) (i: V): Term V L → Prop :=
-  | var_eq: ∀ x, i = x → term_has_variable i (variable x)
-  | fun_has_var: ∀ f t, (∀ x, vector.In x t → term_has_variable i x) → term_has_variable i (function_term f t).
+Definition Term F R V (L: Language F R) := { T: preTerm V L | term_correct T = true }.
+Coercion Term_proj1 F R V (L: Language F R) (T: Term V L) := proj1_sig T.
 
-Fixpoint formula_has_free_variable F R V (L: Language F R) (A: Formula V L) (i: V): Prop :=
-  match A with
-  | equality t1 t2 => term_has_variable i t1 ∨ term_has_variable i t2
-  | atomic_formula r v => vector.Exists (term_has_variable i) v
-  | negation f => formula_has_free_variable f i
-  | disjunction f1 f2 => formula_has_free_variable f1 i ∨ formula_has_free_variable f2 i
-  | conjunction f1 f2 => formula_has_free_variable f1 i ∨ formula_has_free_variable f2 i
-  | existence_quantifier v f => v <> i ∧ formula_has_free_variable f i
-  | universal_quantifier v f => v <> i ∧ formula_has_free_variable f i
-  end.
+Inductive preFormula F R V (L: Language F R): Type :=
+  | equality: Term V L → Term V L → preFormula V L
+  | atomic_formula: ∀ (r: R), list (Term V L) → preFormula V L
+  | negation: preFormula V L → preFormula V L
+  | disjunction: preFormula V L → preFormula V L → preFormula V L
+  | conjunction: preFormula V L → preFormula V L → preFormula V L
+  | existence_quantifier: V → preFormula V L → preFormula V L
+  | universal_quantifier: V → preFormula V L → preFormula V L.
 
-Definition has_n_free_variables F R V (L: Language F R) (A: Formula V L) (n: nat) :=
-  ∃ (v: V^n), vector.NoDup v ∧ (∀ (x: V), formula_has_free_variable A x ↔ vector.In x v).
+Definition formula_correct F R V (L: Language F R) (A: preFormula V L): bool.
+Proof.
+  induction A.
+  + exact true.
+  + exact (andb
+     (if Nat.eq_dec (length l) (relation_arity L r) then true else false)
+     (forallb (@term_correct F R V L) (map (@Term_proj1 F R V L) l))).
+  + exact IHA.
+  + exact (andb IHA1 IHA2).
+  + exact (andb IHA1 IHA2).
+  + exact IHA.
+  + exact IHA.
+Defined.
+
+Definition Formula F R V (L: Language F R) := { A: preFormula V L | formula_correct A = true }.
+Coercion Formula_proj1 F R V (L: Language F R) (A: Formula V L) := proj1_sig A.
+
+Definition preterm_has_variable F R V (L: Language F R) (i: V) (T: preTerm V L): Prop.
+Proof.
+  induction T using preTerm_recursion.
+  + exact (i = v).
+  + induction X. exact False. exact (f0 ∨ IHX).
+Defined.
+
+Definition preformula_has_free_variable F R V (L: Language F R) (i: V) (A: preFormula V L): Prop.
+Proof.
+  induction A.
+  + exact (preterm_has_variable i t ∨ preterm_has_variable i t0).
+  + exact (Exists (preterm_has_variable i) (map (@Term_proj1 F R V L) l)).
+  + exact IHA.
+  + exact (IHA1 ∨ IHA2).
+  + exact (IHA1 ∨ IHA2).
+  + exact (v ≠ i ∧ IHA).
+  + exact (v ≠ i ∧ IHA).
+Defined.
+
+Definition has_n_free_variables F R V (L: Language F R) (A: preFormula V L) (n: nat) :=
+  ∃ (v: list V), NoDup v ∧ length v = n ∧ (∀ (x: V), preformula_has_free_variable x A ↔ In x v).
 
 Structure Sentence F R V (L: Language F R) := {
   sentenceFormula:> Formula V L;
-  sentenceProperty: ∀ i, ¬ formula_has_free_variable sentenceFormula i
+  sentenceProperty: ∀ i, ¬ preformula_has_free_variable i sentenceFormula
 }.
 
 (* Structure, Interpretation *)
 
 Structure Structure {F R} (L: Language F R) := {
   domain: Type;
-  function: ∀ (f: F), Function domain (function_arity L f);
-  relation: ∀ (r: R), Relation domain (relation_arity L r)
+  function: ∀ (f: F) (x: list domain) (H: length x = function_arity L f), domain;
+  relation: ∀ (r: R) (x: list domain) (H: length x = relation_arity L r), Prop
 }.
 
-Fixpoint interpreted_term F R V (L: Language F R) (M: Structure L) (assignment: V → domain M) (T: Term V L) {struct T}: domain M :=
-  match T with
-  | variable x => assignment x
-  | function_term f v => function M f ((fix map' n (v': (Term V L)^n) := match v' with
-                                                  | vnil=> vnil
-                                                  | vcons x t => vcons (interpreted_term M assignment x) (map' _ t)
-                                                  end) _ v)
-  end.
+Definition interpreted_term F R V (L: Language F R) (M: Structure L) (assignment: V → domain M) (T: Term V L): domain M.
+Proof.
+  destruct T as [T H]. induction T using preTerm_recursion.
+  + exact (assignment v).
+  + simpl in *. apply andb_prop in H. destruct H. assert (length v = function_arity L f).
+    { destruct Nat.eq_dec in H; congruence. }
+    assert { x: list (domain M) | length x = length v } as D.
+    { clear H H1. induction v; simpl in *.
+      + exists nil; auto.
+      + inversion X; subst; clear X. apply andb_prop in H0. destruct H0.
+        destruct (IHv X1 H). exists (X0 H0 :: x). simpl. auto. }
+    destruct D. rewrite H1 in e. exact (function M f x e).
+Defined.
 
-Fixpoint interpreted_formula F R V (dec: eq_dec V) (L: Language F R) (M: Structure L) (A: Formula V L) (assignment: V → domain M): Prop :=
-  match A with
-  | equality t1 t2 => interpreted_term M assignment t1 = interpreted_term M assignment t2
-  | atomic_formula r v => relation M r (vector.map (interpreted_term M assignment) v)
-  | negation f => ¬ interpreted_formula dec M f assignment
-  | disjunction f1 f2 => interpreted_formula dec M f1 assignment ∨ interpreted_formula dec M f2 assignment
-  | conjunction f1 f2 => interpreted_formula dec M f1 assignment ∧ interpreted_formula dec M f2 assignment
-  | existence_quantifier v f => ∃ i, interpreted_formula dec M f (λ x, if dec v x then i else assignment x)
-  | universal_quantifier v f => ∀ i, interpreted_formula dec M f (λ x, if dec v x then i else assignment x) 
-  end.
+Definition interpreted_formula F R V (dec: eq_dec V) (L: Language F R) (M: Structure L) (assignment: V → domain M)
+  (A: Formula V L): Prop.
+Proof.
+  destruct A as [A H]. induction A; simpl in *.
+  + exact (interpreted_term M assignment t = interpreted_term M assignment t0).
+  + apply andb_prop in H. destruct H.
+    assert (length l = relation_arity L r).
+    { destruct Nat.eq_dec in H; congruence. }
+    rewrite forallb_forall in H0. clear H.
+    assert { x : list (domain M) | length x = length l } as D.
+    { clear H1. induction l; simpl in *.
+      + exists nil; auto.
+      + assert (∀ x, In x (map (Term_proj1 (L:=L)) l) → term_correct x = true).
+        { intros. apply H0. auto. }
+        destruct (IHl H). exists (interpreted_term M assignment a :: x). simpl. auto. }
+    destruct D. rewrite H1 in e. exact (relation M r x e).
+  + exact (IHA H).
+  + apply andb_prop in H. destruct H. exact (IHA1 H ∧ IHA2 H0).
+  + apply andb_prop in H. destruct H. exact (IHA1 H ∧ IHA2 H0).
+  + exact (IHA H).
+  + exact (IHA H).
+Defined.
 
 Definition model_of_sentence F R V (dec: eq_dec V) (L: Language F R) (M: Structure L) (A: Sentence V L) :=
-  ∀ a, interpreted_formula dec M A a.
+  ∀ a, interpreted_formula dec M a A.
 
 Definition model F R V (dec: eq_dec V) (L: Language F R) (M: Structure L) (A: Sentence V L → Prop) :=
   ∀ a, A a → model_of_sentence dec M a.
@@ -112,11 +158,13 @@ Structure Embedding Fm Rm Fn Rn (Lm: Language Fm Rm) (Ln: Language Fn Rn) (M: St
   domain_map_property: injective domain_map;
   function_arity_preserved: ∀ f, function_arity Lm f = function_arity Ln (function_map f);
   relation_arity_preserved: ∀ r, relation_arity Lm r = relation_arity Ln (relation_map r);
-  embedding_function_property: ∀ f v, domain_map (function M f v) =
-    function N (function_map f) (vector.map domain_map (rew [λ W, domain M ^ W] (function_arity_preserved f) in v));
-  embedding_relation_property: ∀ r v, relation M r v ↔
-    relation N (relation_map r) (vector.map domain_map (rew [λ W, domain M ^ W] (relation_arity_preserved r) in v));
-}.
+  embedding_function_property: ∀ f v H, domain_map (function M f v (H: length v = function_arity Lm f)) =
+    function N (function_map f) (map domain_map v)
+    (eq_trans (eq_trans (map_length domain_map v) H) (function_arity_preserved f));
+  embedding_relation_property: ∀ r v H, relation M r v H ↔
+    relation N (relation_map r) (map domain_map v)
+    (eq_trans (eq_trans (map_length domain_map v) H) (relation_arity_preserved r))
+ }.
 
 Structure Isomorphism Fm Rm Fn Rn (Lm: Language Fm Rm) (Ln: Language Fn Rn) (M: Structure Lm) (N: Structure Ln) := {
   isomorphism_emb: Embedding M N;
@@ -129,16 +177,18 @@ Definition Automorphism F R (L: Language F R) (M: Structure L) := Isomorphism M 
 
 (* Definable set *)
 
-Definition replace_variables V (dec: eq_dec V) M n (v: V ^ n) (m: M ^ n) (assignment: V → M): V → M.
+Definition replace_variables V (dec: eq_dec V) M (v: list V) (m: list M) n (H: length v = n) (H0: length m = n)
+  (assignment: V → M): V → M.
 Proof.
-  intro x. destruct (vector.In_dec dec x v).
-  + exact (vector.nth m (vector.index dec x v i)).
+  intro x. destruct (In_dec dec x v).
+  + refine (nth m H0 (index dec v H x i)).
   + exact (assignment x).
 Defined.
 
-Definition definable F R (L: Language F R) (M: Structure L) n (X: domain M ^ n → Prop) :=
+Definition definable F R (L: Language F R) (M: Structure L) n (X: ∀ l, length l = n → Prop) :=
   ∃ V (dec: eq_dec V) (A: Formula V L), has_n_free_variables A n ∧
-     ∀ (a: V → domain M) (v: V ^ n), (∀ (m: domain M ^ n), X m ↔ interpreted_formula dec M A (replace_variables dec v m a)).
+    ∀ (a: V → domain M) (v: list V) (H: length v = n), (∀ (m: list (domain M)) (H0: length m = n),
+      X m H0 ↔ interpreted_formula dec M (replace_variables dec v m H H0 a) A).
 
 (* Theory, Entailment, Satisfiable, Deductively closed *)
 
@@ -161,7 +211,9 @@ Definition deductive_closure F R V (dec: eq_dec V) (L: Language F R) (S: Sentenc
 
 Theorem negation_of_sentence_as_sentence F R V (L: Language F R) (A: Sentence V L): Sentence V L.
 Proof.
-  refine (Build_Sentence (negation A) _). abstract (destruct A; simpl in *; auto).
+  destruct A. destruct sentenceFormula0. refine (let X: Formula V L := _ in _). Unshelve.
+  2:{ exists (negation x). simpl. auto. }
+  refine (Build_Sentence X _). simpl in *. auto.
 Defined.
 
 Definition complete F R V (dec: eq_dec V) (L: Language F R) (S: Sentence V L → Prop) :=
