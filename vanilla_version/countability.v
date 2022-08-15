@@ -1,4 +1,4 @@
-Require Import Utf8 List Lia Arith Nat Recdef EqdepFacts utils basics.
+Require Import Utf8 List Lia Arith Nat Recdef utils basics.
 Set Implicit Arguments.
 
 (* Cantor pairing function *)
@@ -36,9 +36,6 @@ Proof.
 Qed.
 
 (*-------*)
-
-Definition hinjective I (A: I → Type) (B: Type) (f: ∀ i, A i → B) := ∀ i x j y, f i x = f j y → eq_dep I A i x j y.
-Definition hcountable I (A: I → Type) := ∃ (f: ∀ i, A i → nat), hinjective A f.
 
 Definition countable A := ∃ (f: A → nat), injective f.
 
@@ -172,7 +169,7 @@ Definition encode_Term F R V (L: Language F R) (T: Term V L): list (F + V).
 Proof.
   destruct T. clear e. induction x using preTerm_recursion; simpl in *.
   + exact (inr v :: nil).
-  + induction v.
+  + refine (inl f :: _). induction v.
     - exact nil.
     - inversion X; subst; clear X. exact (IHv X1 ++ X0).
 Defined.
