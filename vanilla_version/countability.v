@@ -52,15 +52,6 @@ Proof.
   apply Ha in H2. apply Hb in H3. congruence.
 Qed.
 
-Definition sum_eq A B (Ra: A → A → Prop) (Rb: B → B → Prop): A + B → A + B → Prop.
-Proof.
-  intros x y. destruct x as [xa | xb], y as [ya | yb].
-  + exact (Ra xa ya).
-  + exact False.
-  + exact False.
-  + exact (Rb xb yb).
-Defined.
-
 Definition sum_countable A B (Ha: countable A) (Hb: countable B): countable (A + B).
 Proof.
   destruct Ha as [fa Ha], Hb as [fb Hb]. unfold countable.
@@ -140,7 +131,7 @@ Proof.
     { clear H0. induction a; simpl; try lia. }
 Qed.
 
-Definition lists_countable A (H: countable A): countable (list A).
+Definition list_countable A (H: countable A): countable (list A).
 Proof.
   destruct H as [f Hf]. set (λ L, encode_list (map f L)) as F.
   exists F. intros ? ? ?. unfold F in *.
@@ -165,12 +156,88 @@ Proof.
 Qed.
 
 
-Definition encode_Term F R V (L: Language F R) (T: Term V L): list (F + V).
+(* ------------- *)
+(* Taken from https://math-comp.github.io/htmldoc/mathcomp.ssreflect.choice.html#GenTree *)
+
+Inductive tree T :=
+  | Leaf: T → tree T
+  | Node: nat → list (tree T) → tree T.
+
+Definition tree_induction T (P: tree T → Prop):
+  (∀ (x: T), P (Leaf x)) →
+  (∀ (n: nat) (v: list (tree T)), Forall P v → P (Node n v)) →
+  ∀ t, P t.
 Proof.
-  destruct T. clear e. induction x using preTerm_recursion; simpl in *.
-  + exact (inr v :: nil).
-  + refine (inl f :: _). induction v.
-    - exact nil.
-    - inversion X; subst; clear X. exact (IHv X1 ++ X0).
+  intros H H0. refine (fix IHt (t: tree T) := match t with Leaf x => H x | Node n v => _ end).
+  refine (H0 _ v _). induction v; constructor; auto.
 Defined.
 
+Definition tree_recursion T (P: tree T → Type):
+  (∀ (x: T), P (Leaf x)) →
+  (∀ (n: nat) (v: list (tree T)), hlist P v → P (Node n v)) →
+  ∀ t, P t.
+Proof.
+  intros H H0. refine (fix IHt (t: tree T) := match t with Leaf x => H x | Node n v => _ end).
+  refine (H0 _ v _). induction v; constructor; auto.
+Defined.
+
+Fixpoint encode_tree T (t: tree T): list (nat + T) :=
+  match t with
+  | Leaf x => inr _ x :: nil
+  | Node n v => inl _ (S n) :: flat_map (@encode_tree T) v ++ inl 0 :: nil
+  end.
+
+Definition behead T (s: list T) :=
+  match s with
+  | nil => nil
+  | cons _ s' => s'
+  end.
+
+Definition decode_tree_step T (c: nat + T) (fs: list (tree T) * list (list (tree T))) :=
+  match c with
+  | inl 0 => (nil, fst fs :: snd fs)
+  | inl (S n) => (Node n (fst fs) :: hd nil (snd fs), behead (snd fs))
+  | inr x => (Leaf x :: fst fs, snd fs)
+  end.
+
+Definition decode_tree T c := hd_error (fst (fold_right (@decode_tree_step T) (nil, nil) c)).
+
+Theorem decode_encode_tree_thm T (x: tree T): decode_tree (encode_tree x) = Some x.
+Proof.
+  unfold decode_tree. set (fs := (nil, nil)).
+  cut (fold_right (@decode_tree_step _) fs (encode_tree x) = (x :: fst fs, snd fs)).
+  intros. rewrite H. simpl. auto.
+  { generalize fs; clear fs. induction x using tree_induction; simpl in *; auto.
+    induction v; simpl in *; auto.
+    inversion H; subst; clear H. pose proof (IHv H3); clear IHv. intros.
+    repeat rewrite fold_right_app in *. simpl.
+    assert (∀ fs: list (tree T) * list (list (tree T)),
+            fst (fold_right (decode_tree_step (T:=T)) (nil, fst fs :: snd fs) (flat_map (encode_tree (T:=T)) v)) = v).
+    { intros. pose (H fs0). rewrite fold_right_app in e. simpl in e. congruence. }
+    assert (∀ fs: list (tree T) * list (list (tree T)),
+            hd nil (snd (fold_right (decode_tree_step (T:=T)) (nil, fst fs :: snd fs) (flat_map (encode_tree (T:=T)) v))) =
+            fst fs).
+    { intros. pose (H fs0). rewrite fold_right_app in e. simpl in e. congruence. }
+    assert (∀ fs: list (tree T) * list (list (tree T)),
+            behead (snd (fold_right (decode_tree_step (T:=T)) (nil, fst fs :: snd fs) (flat_map (encode_tree (T:=T)) v))) =
+            snd fs).
+    { intros. pose (H fs0). rewrite fold_right_app in e. simpl in e. congruence. }
+    clear H. f_equal.
+    + repeat rewrite H2. simpl. congruence.
+    + repeat rewrite H2. simpl. congruence. }
+Qed.
+
+Theorem tree_countable T (H: countable T): countable (tree T).
+Proof.
+  assert (countable nat).
+  { exists (λ x, x). intros ? ? ?. auto. }
+  assert (countable (nat + T)).
+  { apply sum_countable; auto. }
+  assert (countable (list (nat + T))).
+  { apply list_countable. auto. }
+  destruct H2 as [f H2].
+  exists (λ t, f (encode_tree t)).
+  intros ? ? ?. apply H2 in H3.
+  assert (decode_tree (encode_tree x) = decode_tree (encode_tree y)) by congruence.
+  repeat rewrite decode_encode_tree_thm in H4. congruence.
+Qed.

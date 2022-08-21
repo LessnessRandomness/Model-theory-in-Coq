@@ -34,13 +34,11 @@ Proof.
   + constructor. apply IHt. exact IHT.
 Defined.
 
-Definition term_correct F R V (L: Language F R) (T: preTerm V L): bool.
-Proof.
-  induction T using preTerm_recursion.
-  + exact true.
-  + refine (andb (if Nat.eq_dec (length v) (function_arity L f) then true else false) _).
-    induction X. exact true. exact (andb IHX f0).
-Defined.
+Fixpoint term_correct F R V (L: Language F R) (T: preTerm V L): bool :=
+  match T with
+  | variable v => true
+  | function_term f x => andb (Nat.eqb (length x) (function_arity L f)) (forallb (@term_correct F R V L) x)
+  end.
 
 Definition Term F R V (L: Language F R) := { T: preTerm V L | term_correct T = true }.
 Coercion Term_proj1 F R V (L: Language F R) (T: Term V L) := proj1_sig T.
@@ -58,9 +56,8 @@ Definition formula_correct F R V (L: Language F R) (A: preFormula V L): bool.
 Proof.
   induction A.
   + exact true.
-  + exact (andb
-     (if Nat.eq_dec (length l) (relation_arity L r) then true else false)
-     (forallb (@term_correct F R V L) (map (@Term_proj1 F R V L) l))).
+  + exact (andb (Nat.eqb (length l) (relation_arity L r))
+                (forallb (@term_correct F R V L) (map (@Term_proj1 F R V L) l))).
   + exact IHA.
   + exact (andb IHA1 IHA2).
   + exact (andb IHA1 IHA2).
@@ -110,14 +107,16 @@ Definition interpreted_term F R V (L: Language F R) (M: Structure L) (assignment
 Proof.
   destruct T as [T H]. induction T using preTerm_recursion.
   + exact (assignment v).
-  + simpl in *. apply andb_prop in H. destruct H. assert (length v = function_arity L f).
-    { destruct Nat.eq_dec in H; congruence. }
+  + simpl in *. apply andb_prop in H. destruct H. apply beq_nat_true in H. rewrite forallb_forall in H0.
     assert { x: list (domain M) | length x = length v } as D.
-    { clear H H1. induction v; simpl in *.
+    { clear H. induction v; simpl in *.
       + exists nil; auto.
-      + inversion X; subst; clear X. apply andb_prop in H0. destruct H0.
-        destruct (IHv X1 H). exists (X0 H0 :: x). simpl. auto. }
-    destruct D. rewrite H1 in e. exact (function M f x e).
+      + inversion X; subst; clear X. assert (term_correct a = true).
+        { apply H0; auto. }
+        assert (∀ x, In x v → term_correct x = true).
+        { intros. apply H0. auto. }
+        destruct (IHv X1 H1). exists (X0 H :: x). simpl. auto. }
+    destruct D. rewrite H in e. exact (function M f x e).
 Defined.
 
 Definition interpreted_formula F R V (dec: eq_dec V) (L: Language F R) (M: Structure L) (assignment: V → domain M)
@@ -125,17 +124,14 @@ Definition interpreted_formula F R V (dec: eq_dec V) (L: Language F R) (M: Struc
 Proof.
   destruct A as [A H]. induction A; simpl in *.
   + exact (interpreted_term M assignment t = interpreted_term M assignment t0).
-  + apply andb_prop in H. destruct H.
-    assert (length l = relation_arity L r).
-    { destruct Nat.eq_dec in H; congruence. }
-    rewrite forallb_forall in H0. clear H.
+  + apply andb_prop in H. destruct H. apply beq_nat_true in H. rewrite forallb_forall in H0.
     assert { x : list (domain M) | length x = length l } as D.
-    { clear H1. induction l; simpl in *.
+    { clear H. induction l; simpl in *.
       + exists nil; auto.
       + assert (∀ x, In x (map (Term_proj1 (L:=L)) l) → term_correct x = true).
         { intros. apply H0. auto. }
         destruct (IHl H). exists (interpreted_term M assignment a :: x). simpl. auto. }
-    destruct D. rewrite H1 in e. exact (relation M r x e).
+    destruct D. rewrite H in e. exact (relation M r x e).
   + exact (IHA H).
   + apply andb_prop in H. destruct H. exact (IHA1 H ∧ IHA2 H0).
   + apply andb_prop in H. destruct H. exact (IHA1 H ∧ IHA2 H0).
