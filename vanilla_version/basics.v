@@ -44,8 +44,8 @@ Definition Term F R V (L: Language F R) := { T: preTerm V L | term_correct T = t
 Coercion Term_proj1 F R V (L: Language F R) (T: Term V L) := proj1_sig T.
 
 Inductive preFormula F R V (L: Language F R): Type :=
-  | equality: Term V L → Term V L → preFormula V L
-  | atomic_formula: ∀ (r: R), list (Term V L) → preFormula V L
+  | equality: preTerm V L → preTerm V L → preFormula V L
+  | atomic_formula: ∀ (r: R), list (preTerm V L) → preFormula V L
   | negation: preFormula V L → preFormula V L
   | disjunction: preFormula V L → preFormula V L → preFormula V L
   | conjunction: preFormula V L → preFormula V L → preFormula V L
@@ -55,9 +55,8 @@ Inductive preFormula F R V (L: Language F R): Type :=
 Definition formula_correct F R V (L: Language F R) (A: preFormula V L): bool.
 Proof.
   induction A.
-  + exact true.
-  + exact (andb (Nat.eqb (length l) (relation_arity L r))
-                (forallb (@term_correct F R V L) (map (@Term_proj1 F R V L) l))).
+  + exact (andb (term_correct p) (term_correct p0)).
+  + exact (andb (Nat.eqb (length l) (relation_arity L r)) (forallb (@term_correct F R V L) l)).
   + exact IHA.
   + exact (andb IHA1 IHA2).
   + exact (andb IHA1 IHA2).
@@ -78,8 +77,8 @@ Defined.
 Definition preformula_has_free_variable F R V (L: Language F R) (i: V) (A: preFormula V L): Prop.
 Proof.
   induction A.
-  + exact (preterm_has_variable i t ∨ preterm_has_variable i t0).
-  + exact (Exists (preterm_has_variable i) (map (@Term_proj1 F R V L) l)).
+  + exact (preterm_has_variable i p ∨ preterm_has_variable i p0).
+  + exact (Exists (preterm_has_variable i) l).
   + exact IHA.
   + exact (IHA1 ∨ IHA2).
   + exact (IHA1 ∨ IHA2).
@@ -123,14 +122,17 @@ Definition interpreted_formula F R V (dec: eq_dec V) (L: Language F R) (M: Struc
   (A: Formula V L): Prop.
 Proof.
   destruct A as [A H]. induction A; simpl in *.
-  + exact (interpreted_term M assignment t = interpreted_term M assignment t0).
+  + apply andb_prop in H. destruct H.
+    exact (interpreted_term M assignment (exist _ p H) = interpreted_term M assignment (exist _ p0 H0)).
   + apply andb_prop in H. destruct H. apply beq_nat_true in H. rewrite forallb_forall in H0.
     assert { x : list (domain M) | length x = length l } as D.
     { clear H. induction l; simpl in *.
       + exists nil; auto.
-      + assert (∀ x, In x (map (Term_proj1 (L:=L)) l) → term_correct x = true).
+      + assert (∀ x, In x l → term_correct x = true).
         { intros. apply H0. auto. }
-        destruct (IHl H). exists (interpreted_term M assignment a :: x). simpl. auto. }
+        assert (term_correct a = true).
+        { apply H0. auto. }
+        destruct (IHl H). exists (interpreted_term M assignment (exist _ a H1) :: x). simpl. auto. }
     destruct D. rewrite H in e. exact (relation M r x e).
   + exact (IHA H).
   + apply andb_prop in H. destruct H. exact (IHA1 H ∧ IHA2 H0).

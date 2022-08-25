@@ -241,3 +241,70 @@ Proof.
   assert (decode_tree (encode_tree x) = decode_tree (encode_tree y)) by congruence.
   repeat rewrite decode_encode_tree_thm in H4. congruence.
 Qed.
+
+Fixpoint preTerm_to_tree F R V (L: Language F R) (T: preTerm V L): tree (F + R + V) :=
+  match T with
+  | variable v => Leaf (inr v)
+  | function_term f x => Node 0 (Leaf (inl (inl f)) :: map (@preTerm_to_tree F R V L) x)
+  end.
+
+Theorem preTerm_to_tree_injective F R V (L: Language F R): injective (@preTerm_to_tree F R V L).
+Proof.
+  unfold injective. induction x using preTerm_induction; destruct y; simpl; try congruence.
+  intros. inversion H0; subst; clear H0. f_equal. clear f0.
+  assert (length (map (preTerm_to_tree (L:=L)) v) = length (map (preTerm_to_tree (L:=L)) l)) by congruence.
+  repeat rewrite map_length in H0. remember (length v) as W. revert v H l H3 HeqW H0. induction W; intros.
+  + destruct v; simpl in *; try congruence. destruct l; simpl in *; try congruence.
+  + destruct v; simpl in *; try congruence. destruct l; simpl in *; try congruence.
+    inversion HeqW; clear HeqW. inversion H0; clear H0. inversion H3; subst; clear H3.
+    inversion H; subst; clear H. erewrite H3; eauto. f_equal.
+    apply IHW; auto.
+Qed.
+
+Theorem preTerm_countable F R V (Hf: countable F) (Hr: countable R) (Hv: countable V) (L: Language F R): countable (preTerm V L).
+Proof.
+  pose proof (sum_countable (sum_countable Hf Hr) Hv).
+  pose proof (tree_countable H). destruct H0 as [f H0].
+  exists (λ t, f (@preTerm_to_tree F R V L t)).
+  intros ? ? ?. apply H0 in H1. apply preTerm_to_tree_injective in H1. auto.
+Qed.
+
+Fixpoint preFormula_to_tree F R V (L: Language F R) (A: preFormula V L): tree (F + R + V) :=
+  match A with
+  | equality t1 t2 => Node 0 (preTerm_to_tree t1 :: preTerm_to_tree t2 :: nil)
+  | atomic_formula r v => Node 1 (Leaf (inl (inr r)) :: map (@preTerm_to_tree F R V L) v)
+  | negation a => Node 2 (preFormula_to_tree a :: nil)
+  | disjunction a1 a2 => Node 3 (preFormula_to_tree a1 :: preFormula_to_tree a2 :: nil)
+  | conjunction a1 a2 => Node 4 (preFormula_to_tree a1 :: preFormula_to_tree a2 :: nil)
+  | existence_quantifier v a => Node 5 (Leaf (inr v) :: preFormula_to_tree a :: nil)
+  | universal_quantifier v a => Node 6 (Leaf (inr v) :: preFormula_to_tree a :: nil)
+  end.
+
+Theorem preFormula_to_tree_injective F R V (L: Language F R): injective (@preFormula_to_tree F R V L).
+Proof.
+  unfold injective. induction x; destruct y; intros; simpl in *; try congruence.
+  + inversion H; subst; clear H. apply preTerm_to_tree_injective in H1, H2. congruence.
+  + inversion H; subst; clear H. f_equal. clear r0.
+    assert (length (map (preTerm_to_tree (L:=L)) l) = length (map (preTerm_to_tree (L:=L)) l0)) by congruence.
+    repeat rewrite map_length in H. remember (length l) as W. revert l l0 H2 HeqW H. induction W; intros.
+    - destruct l; simpl in *; try congruence. destruct l0; simpl in *; try congruence.
+    - destruct l; simpl in *; try congruence. destruct l0; simpl in *; try congruence.
+      inversion HeqW; clear HeqW. inversion H; clear H. inversion H2; subst; clear H2.
+      apply preTerm_to_tree_injective in H0; subst; f_equal. clear p0.
+      apply (IHW l l0); auto.
+  + inversion H; subst; clear H. rewrite (IHx y); auto.
+  + inversion H; subst; clear H. rewrite (IHx1 y1); auto. rewrite (IHx2 y2); auto.
+  + inversion H; subst; clear H. rewrite (IHx1 y1); auto. rewrite (IHx2 y2); auto.
+  + inversion H; subst; clear H. apply IHx in H2. congruence.
+  + inversion H; subst; clear H. apply IHx in H2. congruence.
+Qed.
+
+Theorem preFormula_countable F R V (Hf: countable F) (Hr: countable R) (Hv: countable V) (L: Language F R):
+  countable (preFormula V L).
+Proof.
+  pose proof (sum_countable (sum_countable Hf Hr) Hv).
+  pose proof (tree_countable H). destruct H0 as [f H0].
+  exists (λ a, f (@preFormula_to_tree F R V L a)).
+  intros ? ? ?. apply H0 in H1. apply preFormula_to_tree_injective in H1. auto.
+Qed.
+
