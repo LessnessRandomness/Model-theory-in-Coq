@@ -308,3 +308,22 @@ Proof.
   intros ? ? ?. apply H0 in H1. apply preFormula_to_tree_injective in H1. auto.
 Qed.
 
+Theorem P_x_true_PI A (P: A → bool): ∀ x (p1 p2: P x = true), p1 = p2.
+Proof.
+  intros. apply Eqdep_dec.eq_proofs_unicity. destruct x0, y; auto. right. congruence.
+Qed.
+
+Theorem Term_countable F R V (Hf: countable F) (Hr: countable R) (Hv: countable V) (L: Language F R): countable (Term V L).
+Proof.
+  pose proof (preTerm_countable Hf Hr Hv L). destruct H as [f H].
+  exists (λ T, f (proj1_sig T)). intros ? ? ?. apply H in H0.
+  destruct x, y. simpl in *. subst. f_equal. apply P_x_true_PI.
+Qed.
+
+Theorem Formula_countable F R V (Hf: countable F) (Hr: countable R) (Hv: countable V) (L: Language F R): countable (Formula V L).
+Proof.
+  pose proof (preFormula_countable Hf Hr Hv L). destruct H as [f H].
+  exists (λ A, f (proj1_sig A)). intros ? ? ?. apply H in H0.
+  destruct x, y. simpl in *. subst. f_equal. apply P_x_true_PI.
+Qed.
+
